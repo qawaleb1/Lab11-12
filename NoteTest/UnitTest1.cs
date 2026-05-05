@@ -5,38 +5,39 @@ namespace Lab11_12.Tests;
 
 public class CrudTests
 {
-    private DataContext CreateTestDatabase()
+    private async Task<int> GetTestUserId()
     {
-        var db = new DataContext();
-        db.Database.EnsureDeleted();
-        db.Database.EnsureCreated();
-        return db;
+        var user = await Crud.CreateUser("Test User");
+        return user.Id;
+    }
+    private async Task CreateTestDatabase()
+    {
+        await using var db = new DataContext();
+        await db.Database.EnsureDeletedAsync();
+        await db.Database.EnsureCreatedAsync();
     }
     
-    private async Task ClearAllNotes() // удаляет все заметки из базы данных
-    {
-        using var db = new DataContext();
-        var allNotes = await db.Notes.ToListAsync();
-        db.Notes.RemoveRange(allNotes);
-        await db.SaveChangesAsync();
-    }
-
     [Fact]
     public async Task Test_Create_AddsNewNote()
     {
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
         var testText = "Моя первая заметка";
-        var note = await Crud.Create(testText);
+        var note = await Crud.Create(userId, testText);
         
         Assert.NotNull(note);
         Assert.Equal(testText, note.Text);
+        Assert.Equal(userId, note.UserId);
         Assert.True(note.Id > 0);
     }
 
     [Fact]
     public async Task Test_Search_Note_ById()
     {
+        await CreateTestDatabase();
         var testText = "Заметка для поиска";
-        var created = await Crud.Create(testText);
+        int userId = await GetTestUserId();
+        var created = await Crud.Create(userId, testText);
         var found = await Crud.Read(created.Id);
 
         Assert.NotNull(found);
@@ -47,6 +48,7 @@ public class CrudTests
     [Fact]
     public async Task Test_Read_ById_ReturnsNullForNonExistentId()
     {
+        await CreateTestDatabase();
         var nonExistentId = 999;
         var result = await Crud.Read(nonExistentId);
         
@@ -56,12 +58,13 @@ public class CrudTests
     [Fact]
     public async Task Test_Checks_Search_Notes_ByText()
     {
-        await ClearAllNotes();
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
         
-        await Crud.Create("Яблочный пирог");
-        await Crud.Create("Банановый коктейль");
-        await Crud.Create("Яблочное варенье");
-        await Crud.Create("Шоколадный торт");
+        await Crud.Create(userId,"Яблочный пирог");
+        await Crud.Create(userId,"Банановый коктейль");
+        await Crud.Create(userId,"Яблочное варенье");
+        await Crud.Create(userId,"Шоколадный торт");
         
         var result = await Crud.Read("Ябло");
 
@@ -71,8 +74,11 @@ public class CrudTests
     [Fact]
     public async Task Test_Read_BySearch_ReturnsEmptyWhenNothingFound()
     {
-        await Crud.Create("Первая заметка");
-        await Crud.Create("Вторая заметка");
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        
+        await Crud.Create(userId, "Первая заметка");
+        await Crud.Create(userId, "Вторая заметка");
         
         var result = await Crud.Read("НесуществующийТекст");
         
@@ -82,7 +88,9 @@ public class CrudTests
     [Fact]
     public async Task Test_Update_ChangesNoteText()
     {
-        var note = await Crud.Create("Старый текст");
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        var note = await Crud.Create(userId, "Старый текст");
         var newText = "Новый текст";
         
         await Crud.Update(note, newText);
@@ -94,7 +102,9 @@ public class CrudTests
     [Fact]
     public async Task Test_Delete_RemovesNote()
     {
-        var note = await Crud.Create("Заметка для удаления");
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        var note = await Crud.Create(userId, "Заметка для удаления");
         var noteId = note.Id;
         
         await Crud.Delete(note);
@@ -106,7 +116,9 @@ public class CrudTests
     [Fact]
     public async Task Test_FullWorkflow_CreateReadUpdateDelete()
     {
-        var note = await Crud.Create("Начальная заметка"); // создал заметку
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        var note = await Crud.Create(userId,"Начальная заметка"); // создал заметку
         Assert.NotNull(note);
         
         var found = await Crud.Read(note.Id);
@@ -127,7 +139,9 @@ public class CrudTests
     [Fact]
     public async Task Test_Create_WithEmptyText_Works()
     {
-        var note = await Crud.Create("");
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        var note = await Crud.Create(userId, "");
         
         Assert.NotNull(note);
         Assert.Equal("", note.Text);
@@ -136,9 +150,11 @@ public class CrudTests
     [Fact]
     public async Task Test_Create_MultipleNotes_HaveDifferentIds()
     {
-        var note1 = await Crud.Create("Заметка 1");
-        var note2 = await Crud.Create("Заметка 2");
-        var note3 = await Crud.Create("Заметка 3");
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
+        var note1 = await Crud.Create(userId, "Заметка 1");
+        var note2 = await Crud.Create(userId, "Заметка 2");
+        var note3 = await Crud.Create(userId, "Заметка 3");
         
         Assert.NotEqual(note1.Id, note2.Id);
         Assert.NotEqual(note2.Id, note3.Id);
@@ -148,14 +164,57 @@ public class CrudTests
     [Fact]
     public async Task Test_Read_WithEmptySearch_ReturnsAllNotes()
     {
-        await ClearAllNotes();
+        await CreateTestDatabase();
+        int userId = await GetTestUserId();
         
-        await Crud.Create("Заметка A");
-        await Crud.Create("Заметка B");
-        await Crud.Create("Заметка C");
+        await Crud.Create(userId, "Заметка A");
+        await Crud.Create(userId, "Заметка B");
+        await Crud.Create(userId, "Заметка C");
         
         var allNotes = await Crud.Read("");
         
         Assert.Equal(3, allNotes.Count);
+    }
+    [Fact]
+    public async Task CreateUser_ShouldSaveToDatabase()
+    {
+        await CreateTestDatabase();
+        string userName = "Тестовый пирожочек";
+        
+        var user = await Crud.CreateUser(userName);
+        
+        Assert.NotNull(user);
+        Assert.True(user.Id > 0);
+        Assert.Equal(userName, user.Name);
+    }
+    
+    [Fact]
+    public async Task CreateNote_ShouldBeLinkedToUser()
+    {
+        await CreateTestDatabase();
+        var user = await Crud.CreateUser("Человечек");
+        string noteText = "Заметка этого челочевка";
+        
+        var note = await Crud.Create(user.Id, noteText);
+        var userNotes = await Crud.GetUserNotes(user.Id);
+        
+        Assert.Single(userNotes);
+        Assert.Equal(user.Id, userNotes[0].UserId);
+        Assert.Equal(noteText, userNotes[0].Text);
+    }
+    
+
+    [Fact]
+    public async Task DeleteUser_ShouldDeleteAllHisNotes()
+    {
+        await CreateTestDatabase();
+        var user = await Crud.CreateUser("Удаляемый");
+        await Crud.Create(user.Id, "Заметка 1");
+        await Crud.Create(user.Id, "Заметка 2");
+        await Crud.DeleteUser(user.Id);
+        var allNotes = await Crud.Read(""); 
+        var orphanNotes = allNotes.Where(n => n.UserId == user.Id).ToList();
+        
+        Assert.Empty(orphanNotes);
     }
 }

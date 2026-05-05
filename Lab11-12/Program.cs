@@ -1,4 +1,6 @@
 ﻿using Lab11_12;
+using Microsoft.EntityFrameworkCore;
+
 
 await using var db = new DataContext();
-await db.Database.EnsureCreatedAsync();
+await db.Database.MigrateAsync();
